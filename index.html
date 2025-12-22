@@ -420,7 +420,7 @@
             map[c.id] = { ...c, score: 0, votesCount: 0 };
           });
 
-          // Aggregate votes
+          // Aggregate vote
           votesData.forEach((v) => {
             if (map[v.contestantId]) {
               map[v.contestantId].score += v.creative + v.theme + v.dedication;
