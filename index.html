@@ -713,6 +713,14 @@
                         (c) => c.team === teamKey
                       );
 
+                      // Count how many votes THIS user has cast in total (across all teams)
+                      // We filter votes where voterName matches current user
+                      const myTotalVotes = votesData.filter(
+                        (v) => v.voterName === user.name
+                      ).length;
+                      const MAX_VOTES = 3;
+                      const remainingVotes = MAX_VOTES - myTotalVotes;
+
                       return (
                         <div
                           key={teamKey}
@@ -734,67 +742,93 @@
                             </span>
                           </h3>
 
-                          {user.team === teamKey ? (
-                            <div className="bg-white/60 backdrop-blur-sm rounded-xl p-6 text-center border border-white/50">
-                              <p className="text-gray-500 text-sm font-medium">
-                                ✨ นี่คือทีมของคุณ
-                              </p>
-                              <p className="text-xs text-gray-400 mt-1">
-                                คุณ: {user.costumeTitle} ({user.name})
-                              </p>
-                            </div>
-                          ) : (
-                            <div className="space-y-3">
-                              {teamMembers.length === 0 ? (
-                                <div className="text-center py-4 text-gray-400 text-xs bg-white/40 rounded-xl">
-                                  ยังไม่มีผู้ลงทะเบียนในทีมนี้
-                                </div>
-                              ) : (
-                                teamMembers.map((contestant) => {
-                                  const hasVoted = votesData.some(
-                                    (v) =>
-                                      v.voterName === user.name &&
-                                      v.contestantId === contestant.id
-                                  );
+                          <div className="space-y-3">
+                            {teamMembers.length === 0 ? (
+                              <div className="text-center py-4 text-gray-400 text-xs bg-white/40 rounded-xl">
+                                ยังไม่มีผู้ลงทะเบียนในทีมนี้
+                              </div>
+                            ) : (
+                              teamMembers.map((contestant) => {
+                                const isSelf = contestant.name === user.name; // Simple check by name (or id if you prefer)
+                                const hasVoted = votesData.some(
+                                  (v) =>
+                                    v.voterName === user.name &&
+                                    v.contestantId === contestant.id
+                                );
+                                // Disable if already voted OR (limit reached AND hasn't voted for this one) OR is self
+                                const isDisabled =
+                                  hasVoted ||
+                                  (myTotalVotes >= MAX_VOTES && !hasVoted) ||
+                                  isSelf;
 
-                                  return (
-                                    <div
-                                      key={contestant.id}
-                                      className="bg-white p-4 rounded-xl shadow-sm border border-gray-100 flex justify-between items-center relative overflow-hidden"
-                                    >
-                                      {hasVoted && (
-                                        <div className="absolute inset-0 bg-gray-50/80 backdrop-blur-[1px] flex items-center justify-center z-10">
-                                          <span className="text-xs font-bold text-green-600 bg-green-100 px-3 py-1 rounded-full border border-green-200">
-                                            โหวตแล้ว ✅
-                                          </span>
-                                        </div>
-                                      )}
-                                      <div className="flex-1 min-w-0 pr-2">
-                                        <p className="font-bold text-gray-900 truncate">
-                                          {contestant.costumeTitle}
-                                        </p>
-                                        <div className="flex items-center gap-1.5 mt-1">
-                                          <Icons.User />
-                                          <span className="text-xs text-gray-500 truncate">
-                                            {contestant.name}
-                                          </span>
-                                        </div>
+                                return (
+                                  <div
+                                    key={contestant.id}
+                                    className={`
+                                        p-4 rounded-xl shadow-sm border flex justify-between items-center relative overflow-hidden
+                                        ${
+                                          isSelf
+                                            ? "bg-amber-50 border-amber-200 ring-1 ring-amber-100"
+                                            : "bg-white border-gray-100"
+                                        }
+                                    `}
+                                  >
+                                    {hasVoted && (
+                                      <div className="absolute inset-0 bg-gray-50/80 backdrop-blur-[1px] flex items-center justify-center z-10">
+                                        <span className="text-xs font-bold text-green-600 bg-green-100 px-3 py-1 rounded-full border border-green-200">
+                                          โหวตแล้ว ✅
+                                        </span>
                                       </div>
+                                    )}
+
+                                    <div className="flex-1 min-w-0 pr-2">
+                                      <p className="font-bold text-gray-900 truncate flex items-center gap-2">
+                                        {contestant.costumeTitle}
+                                        {isSelf && (
+                                          <span className="text-[10px] bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded-full border border-amber-200">
+                                            คุณ
+                                          </span>
+                                        )}
+                                      </p>
+                                      <div className="flex items-center gap-1.5 mt-1">
+                                        <Icons.User />
+                                        <span className="text-xs text-gray-500 truncate">
+                                          {contestant.name}
+                                        </span>
+                                      </div>
+                                    </div>
+
+                                    {!isSelf ? (
                                       <Button
                                         onClick={() =>
                                           setSelectedContestant(contestant)
                                         }
-                                        disabled={hasVoted}
-                                        className="h-9 px-4 text-xs bg-gray-900 text-white shrink-0"
+                                        disabled={isDisabled}
+                                        className={`
+                                            h-9 px-4 text-xs shrink-0 transition-all
+                                            ${
+                                              isDisabled
+                                                ? "opacity-50 grayscale"
+                                                : "bg-gray-900 text-white"
+                                            }
+                                        `}
                                       >
-                                        ให้คะแนน
+                                        {hasVoted
+                                          ? "โหวตแล้ว"
+                                          : myTotalVotes >= MAX_VOTES
+                                          ? "ครบโควต้า"
+                                          : "ให้คะแนน"}
                                       </Button>
-                                    </div>
-                                  );
-                                })
-                              )}
-                            </div>
-                          )}
+                                    ) : (
+                                      <div className="px-3 py-1.5 rounded-lg bg-amber-100 text-amber-700 text-xs font-semibold border border-amber-200 opacity-60">
+                                        คือตัวคุณ
+                                      </div>
+                                    )}
+                                  </div>
+                                );
+                              })
+                            )}
+                          </div>
                         </div>
                       );
                     })}
