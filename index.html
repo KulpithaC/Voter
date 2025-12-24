@@ -530,7 +530,10 @@
 
         const submitAllVotes = async () => {
           if (!window.db) return;
-          if (draftVotes.length === 0) return;
+          if (draftVotes.length !== 3) {
+            alert("กรุณาเลือกให้ครบ 3 คนก่อนส่งคะแนน");
+            return;
+          }
 
           setIsSubmitting(true);
           try {
@@ -849,7 +852,7 @@
 
                                     <div className="flex-1 min-w-0 pr-2">
                                       <p className="font-bold text-gray-900 truncate flex items-center gap-2">
-                                        {contestant.costumeTitle}
+                                        {contestant.name}
                                         {isSelf && (
                                           <span className="text-[10px] bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded-full border border-amber-200">
                                             คุณ
@@ -859,7 +862,7 @@
                                       <div className="flex items-center gap-1.5 mt-1">
                                         <Icons.User />
                                         <span className="text-xs text-gray-500 truncate">
-                                          {contestant.name}
+                                          {contestant.costumeTitle}
                                         </span>
                                       </div>
                                     </div>
@@ -983,17 +986,23 @@
                         เลือกแล้ว {draftVotes.length} คน
                       </div>
                       <div className="text-xs text-gray-500">
-                        จากโควตาทั้งหมด 3 คน
+                        ต้องเลือกให้ครบ 3 คน
                       </div>
                     </div>
                     <Button
                       onClick={submitAllVotes}
-                      disabled={isSubmitting}
-                      className="flex-1 bg-gradient-to-r from-purple-600 to-pink-600 text-white shadow-lg shadow-purple-200"
+                      disabled={isSubmitting || draftVotes.length !== 3}
+                      className={`flex-1 text-white shadow-lg ${
+                        draftVotes.length === 3
+                          ? "bg-gradient-to-r from-purple-600 to-pink-600 shadow-purple-200"
+                          : "bg-gray-400 cursor-not-allowed"
+                      }`}
                     >
                       {isSubmitting
                         ? "กำลังบันทึก..."
-                        : `ยืนยันการโหวต (${draftVotes.length})`}
+                        : draftVotes.length === 3
+                        ? "ยืนยันการโหวต"
+                        : `เลือกอีก ${3 - draftVotes.length} คน`}
                     </Button>
                   </div>
                 </motion.div>
