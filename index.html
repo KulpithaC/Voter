@@ -313,12 +313,12 @@
         const [tempCostume, setTempCostume] = useState("");
         const [isRegistering, setIsRegistering] = useState(false);
 
-        // --- NEW: Category Voting State ---
-        // selectedVotes = { beauty: "id1", realism: "id2", dedication: "id3" }
+        // --- NEW: Category Voting State (Arrays) ---
+        // selectedVotes = { beauty: ["id1", "id2", "id3"], ... }
         const [selectedVotes, setSelectedVotes] = useState({
-          beauty: null,
-          realism: null,
-          dedication: null,
+          beauty: [],
+          realism: [],
+          dedication: [],
         });
         const [activeTab, setActiveTab] = useState("beauty"); // Default tab
         const [isSubmitting, setIsSubmitting] = useState(false);
@@ -418,31 +418,62 @@
           }
         };
 
-        // --- NEW: Vote Selection Logic ---
+        // --- NEW: Vote Selection Logic (Max 3 per category) ---
         const toggleVote = (contestantId) => {
           setSelectedVotes((prev) => {
-            // If clicking the currently selected one in this tab, deselect it
-            if (prev[activeTab] === contestantId) {
-              return { ...prev, [activeTab]: null };
+            const currentVotes = prev[activeTab] || [];
+
+            // If already selected, remove it
+            if (currentVotes.includes(contestantId)) {
+              return {
+                ...prev,
+                [activeTab]: currentVotes.filter((id) => id !== contestantId),
+              };
             }
-            // Otherwise, select this one for the current tab (replacing any previous selection)
-            return { ...prev, [activeTab]: contestantId };
+
+            // If not selected, check limit (3)
+            if (currentVotes.length >= 3) {
+              alert("เลือกได้สูงสุด 3 คนในหมวดนี้");
+              return prev;
+            }
+
+            // Add selection
+            return {
+              ...prev,
+              [activeTab]: [...currentVotes, contestantId],
+            };
           });
         };
+
+        // Helper to check category completion
+        const isCatComplete = (catId) =>
+          (selectedVotes[catId] || []).length === 3;
+
+        // Determine available tabs (Sequential Locking)
+        // Tab 0 (Beauty) always open.
+        // Tab 1 (Realism) open if Beauty complete.
+        // Tab 2 (Dedication) open if Realism complete.
+        const isTabUnlocked = (catId) => {
+          const idx = CATEGORIES.findIndex((c) => c.id === catId);
+          if (idx === 0) return true;
+          const prevCat = CATEGORIES[idx - 1];
+          return isCatComplete(prevCat.id);
+        };
+
+        // Auto-switch tab if current category becomes complete?
+        // Maybe too intrusive. Let user click.
 
         const submitAllVotes = async () => {
           if (!window.db) return;
 
-          // Check if all categories are filled
-          const missingCategories = CATEGORIES.filter(
-            (cat) => !selectedVotes[cat.id]
-          );
+          // Check if ALL categories are filled (3 each = 9 total)
+          const incomplete = CATEGORIES.filter((c) => !isCatComplete(c.id));
 
-          if (missingCategories.length > 0) {
+          if (incomplete.length > 0) {
             alert(
-              `กรุณาเลือกให้ครบทุกหมวด (เหลือ: ${missingCategories
+              `กรุณาเลือกให้ครบ 3 คนในหมวด: ${incomplete
                 .map((c) => c.label)
-                .join(", ")})`
+                .join(", ")}`
             );
             return;
           }
@@ -455,24 +486,27 @@
             const batch = writeBatch(window.db);
             const votesRef = collection(window.db, "votes");
 
-            // Create 3 vote documents, one for each category
-            Object.entries(selectedVotes).forEach(([catId, contestantId]) => {
-              const newVoteRef = doc(votesRef);
-              batch.set(newVoteRef, {
-                voterName: user.name,
-                contestantId: contestantId,
-                category: catId, // Save category!
-                timestamp: serverTimestamp(),
+            // Iterate categories
+            Object.entries(selectedVotes).forEach(([catId, contestantIds]) => {
+              // Iterate votes in category
+              contestantIds.forEach((cId) => {
+                const newVoteRef = doc(votesRef);
+                batch.set(newVoteRef, {
+                  voterName: user.name,
+                  contestantId: cId,
+                  category: catId,
+                  timestamp: serverTimestamp(),
+                });
               });
             });
 
             await batch.commit();
 
-            // Reset (though usually we show "Done" state)
+            // Reset
             setSelectedVotes({
-              beauty: null,
-              realism: null,
-              dedication: null,
+              beauty: [],
+              realism: [],
+              dedication: [],
             });
 
             const toast = document.createElement("div");
@@ -495,12 +529,9 @@
           [votesData, user]
         );
 
-        // We consider "finished voting" if user has submitted votes for *all 3 categories* previously in DB?
-        // Or just "has any votes"? The prompt implies once submitted, it's done.
-        // Let's assume one rigorous submission per user.
-        // If we want to allow re-voting or incremental voting, the logic would be complex.
-        // For now, let's assume if they have >= 3 votes in DB, they are done.
-        const hasFinishedVoting = myExistingVotes.length >= 3;
+        // Has finished if we have >= 9 votes? Or just >= 3 in each category?
+        // Let's assume >= 9 votes in DB implies done.
+        const hasFinishedVoting = myExistingVotes.length >= 9;
 
         // Views
         if (!user) {
@@ -567,6 +598,13 @@
           );
         }
 
+        // Calculate Current Progress
+        const totalSelected = Object.values(selectedVotes).reduce(
+          (acc, arr) => acc + arr.length,
+          0
+        );
+        const isAllComplete = CATEGORIES.every((c) => isCatComplete(c.id));
+
         return (
           <div className="min-h-screen pb-40 max-w-md mx-auto relative bg-gray-50/50">
             {/* Header */}
@@ -596,43 +634,60 @@
                     📥 การลงคะแนน (3 หมวด)
                   </h3>
                   <p className="text-xs text-gray-500">
-                    เลือกผู้ชนะ 1 คน ในแต่ละหมวดด้านล่าง (ต้องครบทั้ง 3
-                    หมวดก่อนส่ง)
+                    โหวตหมวดละ 3 คน (ต้องครบ 3 คนก่อนถึงจะไปหมวดถัดไปได้)
                   </p>
                 </div>
 
                 {/* TABS */}
                 <div className="flex gap-2 overflow-x-auto pb-2 no-scrollbar">
-                  {CATEGORIES.map((cat) => {
+                  {CATEGORIES.map((cat, idx) => {
                     const isActive = activeTab === cat.id;
-                    const isSelected = !!selectedVotes[cat.id];
+                    const count = (selectedVotes[cat.id] || []).length;
+                    const isUnlocked = isTabUnlocked(cat.id);
+                    const isComplete = count === 3;
                     const Icon = cat.icon;
+
                     return (
                       <button
                         key={cat.id}
-                        onClick={() => setActiveTab(cat.id)}
+                        onClick={() => isUnlocked && setActiveTab(cat.id)}
+                        disabled={!isUnlocked}
                         className={`
-															whitespace-nowrap flex items-center gap-2 px-4 py-2.5 rounded-full text-sm font-semibold transition-all border
+															relative whitespace-nowrap flex items-center gap-2 px-4 py-2.5 rounded-full text-sm font-semibold transition-all border
 															${
                                 isActive
-                                  ? "bg-gray-900 text-white border-gray-900 shadow-lg"
-                                  : "bg-white text-gray-600 border-gray-200 hover:bg-gray-50"
+                                  ? "bg-gray-900 text-white border-gray-900 shadow-lg z-10"
+                                  : isUnlocked
+                                  ? "bg-white text-gray-600 border-gray-200 hover:bg-gray-50"
+                                  : "bg-gray-100 text-gray-400 border-gray-100 cursor-not-allowed grayscale"
                               }
 														`}
                       >
                         <Icon />
                         {cat.label}
-                        {isSelected && (
-                          <span className="ml-1 flex h-2 w-2 rounded-full bg-green-500"></span>
-                        )}
+                        {/* Badge count */}
+                        <span
+                          className={`ml-1 text-[10px] px-1.5 py-0.5 rounded-full ${
+                            isComplete
+                              ? "bg-green-500 text-white"
+                              : "bg-gray-200 text-gray-600"
+                          }`}
+                        >
+                          {count}/3
+                        </span>
                       </button>
                     );
                   })}
                 </div>
 
-                {/* Current Category Title */}
-                <div className="flex items-center gap-2 text-gray-800 font-bold text-lg px-2">
-                  {CATEGORIES.find((c) => c.id === activeTab)?.label}
+                {/* Current Category Title & Count */}
+                <div className="flex items-center justify-between px-2">
+                  <div className="flex items-center gap-2 text-gray-800 font-bold text-lg">
+                    {CATEGORIES.find((c) => c.id === activeTab)?.label}
+                  </div>
+                  <div className="text-sm font-medium text-gray-500">
+                    เลือกแล้ว {(selectedVotes[activeTab] || []).length}/3
+                  </div>
                 </div>
 
                 <div className="space-y-3">
@@ -644,17 +699,12 @@
                     contestants.map((contestant) => {
                       const isSelf = contestant.name === user.name;
 
-                      // Check if already submitted in DB (global check for simplicity, or complex per category check?)
-                      // For now, assume if you voted at all, you are done.
                       const alreadyVotedInDb = hasFinishedVoting;
 
-                      const isDraftSelected =
-                        selectedVotes[activeTab] === contestant.id;
-
-                      // Allow selecting this person IF:
-                      // 1. Not self
-                      // 2. Not already submitted to DB
-                      // 3. (Optional) Not selected in OTHER categories? (Prompt didn't forbid, so allow)
+                      // Check if selected in CURRENT tab
+                      const isDraftSelected = (
+                        selectedVotes[activeTab] || []
+                      ).includes(contestant.id);
 
                       const isDisabled = isSelf || alreadyVotedInDb;
 
@@ -708,20 +758,13 @@
                                         }
 																		`}
                             >
-                              {isDraftSelected && (
-                                <svg
-                                  xmlns="http://www.w3.org/2000/svg"
-                                  className="h-4 w-4 text-white"
-                                  viewBox="0 0 20 20"
-                                  fill="currentColor"
-                                >
-                                  <path
-                                    fillRule="evenodd"
-                                    d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"
-                                    clipRule="evenodd"
-                                  />
-                                </svg>
-                              )}
+                              {isDraftSelected ? (
+                                <span className="text-white text-xs font-bold">
+                                  {(selectedVotes[activeTab] || []).indexOf(
+                                    contestant.id
+                                  ) + 1}
+                                </span>
+                              ) : null}
                             </div>
                           ) : (
                             <div className="px-3 py-1.5 rounded-lg bg-amber-100 text-amber-700 text-xs font-semibold border border-amber-200 opacity-60">
@@ -749,43 +792,39 @@
                   <div className="flex flex-col gap-3">
                     {/* Progress Indicator */}
                     <div className="flex justify-between items-center px-1">
-                      <span className="text-xs text-gray-500">ความคืบหน้า</span>
+                      <div className="flex flex-col">
+                        <span className="text-xs text-gray-500">
+                          ความคืบหน้าทั้งหมด
+                        </span>
+                        <span className="text-[10px] text-gray-400">
+                          (ต้องครบ 3 คนในทุกหมวด)
+                        </span>
+                      </div>
                       <span className="text-xs font-bold text-gray-900">
-                        {Object.values(selectedVotes).filter(Boolean).length} /
-                        3 หมวด
+                        {totalSelected} / 9 คน
                       </span>
                     </div>
                     <div className="h-2 w-full bg-gray-100 rounded-full overflow-hidden">
                       <div
                         className="h-full bg-gradient-to-r from-purple-500 to-pink-500 transition-all duration-500"
-                        style={{
-                          width: `${
-                            (Object.values(selectedVotes).filter(Boolean)
-                              .length /
-                              3) *
-                            100
-                          }%`,
-                        }}
+                        style={{ width: `${(totalSelected / 9) * 100}%` }}
                       ></div>
                     </div>
 
                     <Button
                       onClick={submitAllVotes}
-                      disabled={
-                        isSubmitting ||
-                        Object.values(selectedVotes).some((v) => !v)
-                      }
+                      disabled={isSubmitting || !isAllComplete}
                       className={`w-full text-white shadow-lg ${
-                        !Object.values(selectedVotes).some((v) => !v)
+                        isAllComplete
                           ? "bg-gradient-to-r from-purple-600 to-pink-600 shadow-purple-200"
                           : "bg-gray-400 cursor-not-allowed"
                       }`}
                     >
                       {isSubmitting
                         ? "กำลังบันทึก..."
-                        : !Object.values(selectedVotes).some((v) => !v)
+                        : isAllComplete
                         ? "ยืนยันการโหวตทั้งหมด"
-                        : "เลือกให้ครบทั้ง 3 หมวด"}
+                        : "เลือกให้ครบทุกหมวดเพื่อส่ง"}
                     </Button>
                   </div>
                 </motion.div>
