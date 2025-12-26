@@ -190,23 +190,7 @@
             <path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z" />
           </svg>
         ),
-        LogOut: () => (
-          <svg
-            xmlns="http://www.w3.org/2000/svg"
-            width="24"
-            height="24"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          >
-            <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
-            <polyline points="16 17 21 12 16 7" />
-            <line x1="21" x2="9" y1="12" y2="12" />
-          </svg>
-        ),
+
         User: () => (
           <svg
             xmlns="http://www.w3.org/2000/svg"
@@ -392,58 +376,6 @@
           }
         };
 
-        const handleLogout = async () => {
-          if (
-            confirm(
-              "ทบทวนอีกครั้ง: การออกจากระบบจะลบข้อมูลการลงทะเบียนและคะแนนที่คุณโหวตทั้งหมด คุณแน่ใจหรือไม่?"
-            )
-          ) {
-            try {
-              const {
-                deleteDoc,
-                doc,
-                collection,
-                query,
-                where,
-                getDocs,
-                writeBatch,
-              } = window.firebaseData;
-
-              // 1. Delete Contestant
-              if (user.id) {
-                await deleteDoc(doc(window.db, "contestants", user.id));
-              }
-
-              // 2. Delete Votes by this user
-              const qVotes = query(
-                collection(window.db, "votes"),
-                where("voterName", "==", user.name)
-              );
-              const snapshot = await getDocs(qVotes);
-
-              const batch = writeBatch(window.db);
-              snapshot.docs.forEach((doc) => {
-                batch.delete(doc.ref);
-              });
-              await batch.commit();
-
-              // 3. Clear Local State
-              localStorage.removeItem("party_user");
-              setUser(null);
-              setTempName("");
-              setTempCostume("");
-              setDraftVotes([]); // Reset drafts
-            } catch (error) {
-              console.error("Error during cleanup:", error);
-              alert("เกิดข้อผิดพลาดในการลบข้อมูล แต่จะทำการออกจากระบบ");
-              localStorage.removeItem("party_user");
-              setUser(null);
-              setTempName("");
-              setTempCostume("");
-            }
-          }
-        };
-
         // --- NEW: Toggle Vote Selection ---
         const toggleVote = (contestantId) => {
           setDraftVotes((prev) => {
@@ -587,9 +519,6 @@
                   </span>
                 </div>
               </div>
-              <Button variant="ghost" onClick={handleLogout} className="!p-2">
-                <Icons.LogOut />
-              </Button>
             </header>
 
             {/* Content Area - NO TABS ANYMORE */}
